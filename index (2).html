@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Presence Monitor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      color: #fff;
+      margin: 0;
+      padding: 0;
+    }
+	#presence {
+	  width: 510px;
+	  height: 110px;
+	  margin: auto;
+  	  padding: 20px;
+	  border: 1px solid #333;
+	  border-radius: 10px;
+	  background-color: #121212;
+	  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+	  display: flex; /* Use flexbox */
+	  align-items: center; /* Center vertically */
+	  position: fixed; /* Use fixed positioning */
+	}
+    h2 {
+      color: #1db954;
+      margin: 0;
+      font-size: 1.5em;
+      margin-bottom: 5px;
+    }
+    p {
+      margin: 5px 0;
+    }
+    img {
+      width: 100px;
+      height: 100px;
+      border-radius: 5px;
+    }
+    .details {
+      padding-left: 10px;
+    }
+    .progress-bar-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .progress-bar {
+      width: 300px;
+      height: 10px;
+      background-color: #333;
+      border-radius: 5px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .progress {
+      height: 100%;
+      background-color: #1db954;
+    }
+    .progress-text {
+      font-size: 0.8em;
+      margin-top: 5px;
+    }
+    a {
+      color: #1db954;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .play {
+      position: fixed;
+      top: 6.5%;
+      right: 1410px;
+      height: 32px;
+      width: 32px;
+    }
+  </style>
+</head>
+<body>
+  <div id="presence"></div>
+
+  <script>
+    const apiKey = '03dadcf9e320d5a4e69d22165abb869c'; // Replace with your actual API key
+
+    const ws = new WebSocket('wss://api.lanyard.rest/socket');
+    ws.addEventListener('open', function (event) {
+      console.log('WebSocket connection opened.');
+
+      // Send Opcode 2: Initialize to subscribe to user presence
+      ws.send(JSON.stringify({
+        op: 2,
+        d: {
+          subscribe_to_id: '611009891607379988' // Replace with the user ID you want to monitor
+        }
+      }));
+    });
+
+    // Event listener for WebSocket messages
+    ws.addEventListener('message', function (event) {
+      const message = JSON.parse(event.data);
+      console.log('Received message:', message);
+
+      // Handle different types of messages
+      switch (message.t) {
+        case 'INIT_STATE':
+          // Initial state received, display the user's presence if available
+          if (message.d && message.d.discord_user) {
+            displayPresence(message.d);
+          } else {
+            displayNoPresence();
+          }
+          break;
+        case 'PRESENCE_UPDATE':
+          // Presence update received, update the displayed presence if available
+          if (message.d) {
+            displayPresence(message.d);
+          } else {
+            displayNoPresence();
+          }
+          break;
+        default:
+          console.log('Unhandled message type:', message.t);
+      }
+    });
+
+    // Function to display user presence
+    function displayPresence(presence) {
+      const presenceDiv = document.getElementById('presence');
+
+      // Check if the user is listening to Spotify
+      if (presence.listening_to_spotify && presence.spotify) {
+        const { song, artist, album_art_url, timestamps } = presence.spotify;
+
+        // Calculate the progress percentage of the track
+        function updateProgressBar() {
+          const currentTime = Date.now();
+          const elapsedTime = currentTime - timestamps.start;
+          const totalTime = timestamps.end - timestamps.start;
+          const progress = Math.min(100, (elapsedTime / totalTime) * 100);
+          
+          // Calculate current time in minutes and seconds
+          const currentTimeInSeconds = Math.floor(elapsedTime / 1000) % 60;
+          const currentTimeInMinutes = Math.floor(elapsedTime / (1000 * 60));
+          
+          // Calculate total time in minutes and seconds
+          const totalTimeInSeconds = Math.floor(totalTime / 1000) % 60;
+          const totalTimeInMinutes = Math.floor(totalTime / (1000 * 60));
+
+          progressBar.style.width = `${progress}%`;
+          progressText.textContent = `${currentTimeInMinutes}:${currentTimeInSeconds} / ${totalTimeInMinutes}:${totalTimeInSeconds}`;
+        }
+
+        presenceDiv.innerHTML = `
+          <div style="display: flex; position: relative;">
+            <img src="${album_art_url}" alt="Album Art">
+            <div class="details">
+              <h2>${song}</h2>
+              <p>${artist}</p>
+              <div class="progress-bar-wrapper">
+                <div class="progress-bar">
+                  <div class="progress" id="progress-bar"></div>
+                </div>
+                <span class="progress-text" id="progress-text"></span>
+              </div>
+            </div>
+            <a href="https://open.spotify.com/track/${presence.spotify.track_id}" target="_blank" rel="noopener noreferrer">
+<img class="play" src="data:image/png;base64,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"</img>
+            </a>
+          </div>
+        `;
+
+        // Update progress bar every second
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        updateProgressBar(); // Initial update
+        setInterval(updateProgressBar, 1000); // Update every second
+      } else {
+        // Display default message when the user is not listening to Spotify
+        presenceDiv.innerHTML = '<p>Not listening to Spotify</p>';
+      }
+    }
+
+    // Function to display message when there is no presence data
+    function displayNoPresence() {
+      const presenceDiv = document.getElementById('presence');
+      presenceDiv.innerHTML = '<p>No presence data available</p>';
+    }
+
+    // Set API key in request headers
+    ws.addEventListener('error', function (event) {
+      console.error('WebSocket error:', event);
+    });
+
+    ws.addEventListener('close', function (event) {
+      console.log('WebSocket connection closed.');
+    });
+  </script>
+</body>
+</html>
